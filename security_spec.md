@@ -1,41 +1,47 @@
-# Security Specification: NURMD Game Hub Firestore Rules
+# Hardened Security Specification: NURMD Game Hub
 
-This document outlines the security invariants, the "Dirty Dozen" malicious payloads, and the validation criteria for securing Firestore data in NURMD Game Hub.
+This document defines the strict data invariants, security boundaries, and validation rules for the 6 core collections in NURMD Games.
+
+---
 
 ## 1. Core Data Invariants
 
-### Profiles Collection (`/profiles/{userId}`)
-1. **Scope/Ownership:** A user document is strictly writable and readable only by the authenticated owner (`request.auth.uid == userId`).
-2. **Immutability:** Once created, critical metadata fields such as the original profile owner must remain immutable.
-3. **Validation:** Up-to-date and compliant with schema specs (contains valid `username`, `avatarId`, `coins`, and stats).
+### Users Collection (`/users/{uid}`)
+1. **Scope/Ownership:** A user document is strictly readable by any signed-in user (or private to owner only based on application needs, but since rankings/usernames are shared, usernames must be visible, or we split. Wait! The prompt says "Users can read/write only their own profile" for profile collection, and "Leaderboards are publicly readable but writable only by authenticated users").
+2. **Strict Matching:** The user's credential path `uid` must exactly equal `request.auth.uid`.
+3. **Property Bounds:** Schema must strictly match:
+   - `uid` is string matching auth uid.
+   - `username` is string (1 to 32 chars).
+   - `email` is string.
+   - `avatar` matches valid IDs.
+   - `coins` is a positive integer.
+   - `totalScore` is a positive integer.
+   - `achievements` is an array of strings.
+   - `createdAt` is a Server Timestamp.
 
-### Leaderboards Collection (`/leaderboard/{entryId}`)
-1. **Integrity:** A user can insert or modify their own leaderboard entry but must not write under someone else's identity.
-2. **Value Bounds:** Scores and date strings must have strict type matching and length containment to defend against overflow/Denial-of-Wallet attacks.
+### Leaderboards Collection (`/leaderboards/{entryId}`)
+1. **Scope/Ownership:** Publicly readable. Writable only if authenticated, where:
+   - `uid` from payload matches `request.auth.uid`.
+2. **Type Bounds:** `score` matches `int` and is positive.
 
----
-
-## 2. The "Dirty Dozen" Adversarial Payloads
-
-Any attempt to commit these payloads must result in standard `PERMISSION_DENIED` rejection.
-
-| Payload ID | Description / Threat Vector | Target Collection | Malicious Payload Concept |
-|------------|-----------------------------|-------------------|---------------------------|
-| **PL-01**  | Identity Spoofing (Create profile with foreign UID) | `/profiles/{userId}` | Write a profile for `victim_uid` using token `attacker_uid`. |
-| **PL-02**  | Identity Spoofing (Read other user's private data) | `/profiles/{userId}` | Read `/profiles/victim_uid` with token `attacker_uid`. |
-| **PL-03**  | Coin Hack (Inject massive coins injection) | `/profiles/{userId}` | Update `coins: 9999999` directly via the client SDK. |
-| **PL-04**  | Achievement Hack (Self-unlock all achievements) | `/profiles/{userId}` | Ingest predefined achievements with `unlocked: true` of expensive titles without merit. |
-| **PL-05**  | Rogue Skin Unlock (Force unlock premium unbought items) | `/profiles/{userId}` | Set unearned skins to `unlocked: true` directly. |
-| **PL-06**  | ID Poisoning (Junk character buffer overrun) | `/leaderboard/{entryId}` | Use an entry ID of 10,000 junk bytes. |
-| **PL-07**  | Leaderboard Identity Spoofing | `/leaderboard/{entryId}` | Set `userId` to a target friend's ID while posting a high score. |
-| **PL-08**  | High Score Falsification (Negative score bounds bypass) | `/leaderboard/{entryId}` | Set `score: -99999` to corrupt leaderboard integrity. |
-| **PL-09**  | Value Poisoning (Send string array for score) | `/leaderboard/{entryId}` | Put a long array of strings in the `score` field to crash d3 graphs. |
-| **PL-10**  | System Operational State Denial (Delete Leaderboard Feed) | `/leaderboard/{entryId}` | Call delete on arbitrary entries you did not author. |
-| **PL-11**  | Blanket Read Attack (Scraping profiles list) | `/profiles` | Run listing search without user-bound where constraints. |
-| **PL-12**  | Time Drift Spoofing (Cheat creation dates) | `/profiles/{userId}` | Backdate the `createdAt` or `updatedAt` field using spoofed client value instead of `request.time`. |
+### Achievements / Game Progress / Skins / Settings Collections
+1. **Scope/Ownership:** Only the user can view and edit their own documents in `/achievements/{uid}`, `/gameProgress/{uid}`, `/skins/{uid}`, and `/settings/{uid}`.
 
 ---
 
-## 3. Test Runner Design Verified
+## 2. Adversarial Payloads & Target Defense
 
-Our rules are structured with a Zero-Trust master-gate architecture ensuring that these vectors are defensively isolated. Let us proceed to generate our rules now.
+| Payload ID | Description / Threat Vector | Target Path | Malicious Concept / Expected Result |
+|------------|-----------------------------|-------------|-------------------------------------|
+| **PL-01**  | Profile Spoofing           | `/users/{uid}` | Update another user's profile coins/totalScore directly. -> `PERMISSION_DENIED` |
+| **PL-02**  | Admin Flag Manipulation     | `/users/{uid}` | Inject self-escalated roles like `isAdmin: true` into own profile. -> `PERMISSION_DENIED` |
+| **PL-03**  | Coin Hack                  | `/users/{uid}` | Directly add 999999 coins using client script. -> `PERMISSION_DENIED` |
+| **PL-04**  | Score Overwrite            | `/leaderboards/{entryId}` | Post fake low score to other users’ entries. -> `PERMISSION_DENIED` |
+| **PL-05**  | Rogue Skin Injections      | `/skins/{uid}` | Unlock all Premium content directly in Firestore. -> `PERMISSION_DENIED` |
+| **PL-06**  | Settings Hijacking         | `/settings/{uid}` | Edit other user's game sound levels. -> `PERMISSION_DENIED` |
+| **PL-07**  | Date Spoofing              | `/users/{uid}` | Backdate `createdAt` to gain early access. -> `PERMISSION_DENIED` |
+| **PL-08**  | High Score Falsification   | `/leaderboards/{id}` | Post scores greater than allowed limits or negative. -> `PERMISSION_DENIED` |
+| **PL-09**  | Invalid JSON Map Payload   | `/gameProgress/{uid}` | Send empty or incorrect nested objects. -> `PERMISSION_DENIED` |
+| **PL-10**  | Read Scraping              | `/users` | Run listing queries across other private fields. -> `PERMISSION_DENIED` |
+| **PL-11**  | Path Variable Injection    | `/settings/{uid}` | Send settings UID of 1.5KB junk-character string. -> `PERMISSION_DENIED` |
+| **PL-12**  | Orphaned Key Overwrites    | `/achievements/{uid}` | Set unearned achievements with missing array keys. -> `PERMISSION_DENIED` |

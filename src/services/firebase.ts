@@ -4,16 +4,74 @@
  * and standard formatting-compliant Firestore error handlers.
  */
 
-import { initializeApp } from 'firebase/app';
-import { getAuth, GoogleAuthProvider, signInWithPopup, signOut } from 'firebase/auth';
+import { initializeApp, getApp, getApps } from 'firebase/app';
+import { getAuth, GoogleAuthProvider } from 'firebase/auth';
 import { getFirestore, doc, getDocFromServer } from 'firebase/firestore';
+import { getStorage } from 'firebase/storage';
+import { getAnalytics, isSupported } from 'firebase/analytics';
 import firebaseConfig from '../../firebase-applet-config.json';
 
-// Initialize configuration
-const app = initializeApp(firebaseConfig);
-export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId); /* CRITICAL: The app will break without this line */
-export const auth = getAuth();
+// Safe environment loading
+const metaEnv = (import.meta as any).env || {};
+const finalConfig = {
+  apiKey: metaEnv.VITE_FIREBASE_API_KEY || 
+          metaEnv.NEXT_PUBLIC_FIREBASE_API_KEY || 
+          (typeof process !== 'undefined' ? process.env?.NEXT_PUBLIC_FIREBASE_API_KEY : '') || 
+          firebaseConfig.apiKey,
+  authDomain: metaEnv.VITE_FIREBASE_AUTH_DOMAIN || 
+              metaEnv.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN || 
+              (typeof process !== 'undefined' ? process.env?.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN : '') || 
+              firebaseConfig.authDomain,
+  projectId: metaEnv.VITE_FIREBASE_PROJECT_ID || 
+             metaEnv.NEXT_PUBLIC_FIREBASE_PROJECT_ID || 
+             (typeof process !== 'undefined' ? process.env?.NEXT_PUBLIC_FIREBASE_PROJECT_ID : '') || 
+             firebaseConfig.projectId,
+  storageBucket: metaEnv.VITE_FIREBASE_STORAGE_BUCKET || 
+                 metaEnv.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || 
+                 (typeof process !== 'undefined' ? process.env?.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET : '') || 
+                 firebaseConfig.storageBucket,
+  messagingSenderId: metaEnv.VITE_FIREBASE_MESSAGING_SENDER_ID || 
+                     metaEnv.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID || 
+                     (typeof process !== 'undefined' ? process.env?.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID : '') || 
+                     firebaseConfig.messagingSenderId,
+  appId: metaEnv.VITE_FIREBASE_APP_ID || 
+         metaEnv.NEXT_PUBLIC_FIREBASE_APP_ID || 
+         (typeof process !== 'undefined' ? process.env?.NEXT_PUBLIC_FIREBASE_APP_ID : '') || 
+         firebaseConfig.appId,
+  measurementId: metaEnv.VITE_FIREBASE_MEASUREMENT_ID || 
+                 metaEnv.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID || 
+                 (typeof process !== 'undefined' ? process.env?.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID : '') || 
+                 (firebaseConfig as any).measurementId || '',
+};
+
+// Initialize Firebase App
+const app = getApps().length === 0 ? initializeApp(finalConfig) : getApp();
+
+// Resolve active Firestore database instance
+const isSandbox = finalConfig.projectId === firebaseConfig.projectId;
+const dbId = isSandbox 
+  ? firebaseConfig.firestoreDatabaseId 
+  : (metaEnv.VITE_FIREBASE_DATABASE_ID || 
+     metaEnv.NEXT_PUBLIC_FIREBASE_DATABASE_ID || 
+     (typeof process !== 'undefined' ? process.env?.NEXT_PUBLIC_FIREBASE_DATABASE_ID : '') || 
+     '(default)');
+
+export const db = getFirestore(app, dbId); /* CRITICAL: The app will break without this line */
+export const auth = getAuth(app);
+export const storage = getStorage(app);
 export const googleProvider = new GoogleAuthProvider();
+
+// Safe Analytics Initialization
+export let analytics: any = null;
+isSupported().then((supported) => {
+  if (supported) {
+    try {
+      analytics = getAnalytics(app);
+    } catch (e) {
+      console.warn("Analytics initialization failed (likely sandbox domain restrictions):", e);
+    }
+  }
+}).catch(() => {});
 
 // Operational Types matching Firestore Spec
 export enum OperationType {

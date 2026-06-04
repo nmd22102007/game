@@ -1,97 +1,168 @@
 {
   "entities": {
-    "PlayerProfile": {
-      "title": "PlayerProfile",
-      "description": "User profile state in NURMD Game Hub",
+    "User": {
+      "title": "User",
+      "description": "Authenticated user profile in NURMD hub",
       "type": "object",
       "properties": {
-        "username": {
-          "type": "string",
-          "description": "The user's gamer username"
+        "uid": {
+          "type": "string"
         },
-        "avatarId": {
-          "type": "string",
-          "description": "Equipped avatar item ID"
+        "username": {
+          "type": "string"
+        },
+        "email": {
+          "type": "string"
+        },
+        "avatar": {
+          "type": "string"
         },
         "coins": {
-          "type": "integer",
-          "description": "Current coins balance"
+          "type": "integer"
         },
         "totalScore": {
-          "type": "integer",
-          "description": "Total master ELO-styled competency score of the gamer"
-        },
-        "stats": {
-          "type": "object",
-          "description": "Aggregated dashboard statistics for all modular matches"
-        },
-        "skins": {
-          "type": "array",
-          "description": "Unlocked and equipped shop skins"
+          "type": "integer"
         },
         "achievements": {
-          "type": "array",
-          "description": "Gamer achievement master unlock history records"
+          "type": "array"
+        },
+        "createdAt": {
+          "type": "object"
         }
       },
       "required": [
+        "uid",
         "username",
-        "avatarId",
+        "email",
+        "avatar",
         "coins",
         "totalScore",
-        "stats",
-        "skins",
-        "achievements"
+        "achievements",
+        "createdAt"
       ]
     },
-    "LeaderboardEntry": {
-      "title": "LeaderboardEntry",
-      "description": "Aggregated high score record on server",
+    "Leaderboard": {
+      "title": "Leaderboard",
+      "description": "Leaderboard score record",
       "type": "object",
       "properties": {
-        "username": {
-          "type": "string",
-          "description": "Gamer name of the entry"
+        "uid": {
+          "type": "string"
         },
-        "score": {
-          "type": "integer",
-          "description": "Numeric game score"
+        "username": {
+          "type": "string"
         },
         "game": {
-          "type": "string",
-          "description": "Name of the game (e.g. Love Runner, Chess, Wave Dash)"
+          "type": "string"
         },
-        "date": {
-          "type": "string",
-          "description": "ISO format date of logging"
+        "score": {
+          "type": "integer"
         },
-        "avatarId": {
-          "type": "string",
-          "description": "Icon avatar indicator"
-        },
-        "userId": {
-          "type": "string",
-          "description": "Authenticated userID of record holder"
+        "createdAt": {
+          "type": "object"
         }
       },
       "required": [
+        "uid",
         "username",
-        "score",
         "game",
-        "date",
-        "avatarId",
-        "userId"
+        "score",
+        "createdAt"
+      ]
+    },
+    "AchievementsProgress": {
+      "title": "AchievementsProgress",
+      "description": "The user's individual unlocked achievements logs",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string"
+        },
+        "list": {
+          "type": "array"
+        }
+      },
+      "required": [
+        "uid",
+        "list"
+      ]
+    },
+    "GameProgress": {
+      "title": "GameProgress",
+      "description": "The high scores and play counters for all games",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string"
+        },
+        "stats": {
+          "type": "object"
+        }
+      },
+      "required": [
+        "uid",
+        "stats"
+      ]
+    },
+    "SkinsProgress": {
+      "title": "SkinsProgress",
+      "description": "Collection of unearned and custom equipped assets skins",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string"
+        },
+        "list": {
+          "type": "array"
+        }
+      },
+      "required": [
+        "uid",
+        "list"
+      ]
+    },
+    "SettingsState": {
+      "title": "SettingsState",
+      "description": "Volume configuration and high-contrast toggles",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string"
+        },
+        "settings": {
+          "type": "object"
+        }
+      },
+      "required": [
+        "uid",
+        "settings"
       ]
     }
   },
   "firestore": {
-    "/profiles/{userId}": {
-      "schema": "PlayerProfile",
-      "description": "Personalized user data and unlock progress index"
+    "/users/{uid}": {
+      "schema": "User",
+      "description": "Primary identity records for a given UID"
     },
-    "/leaderboard/{entryId}": {
-      "schema": "LeaderboardEntry",
-      "description": "Public aggregated tournament records"
+    "/leaderboards/{entryId}": {
+      "schema": "Leaderboard",
+      "description": "Aggregated historic game scores"
+    },
+    "/achievements/{uid}": {
+      "schema": "AchievementsProgress",
+      "description": "Array of logged achievements"
+    },
+    "/gameProgress/{uid}": {
+      "schema": "GameProgress",
+      "description": "Breakdown of plays/wins metrics"
+    },
+    "/skins/{uid}": {
+      "schema": "SkinsProgress",
+      "description": "Unlocked status variables of elements"
+    },
+    "/settings/{uid}": {
+      "schema": "SettingsState",
+      "description": "Audio volumes parameters"
     }
   }
 }
