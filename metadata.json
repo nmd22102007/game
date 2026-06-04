@@ -1,0 +1,6 @@
+{
+  "name": "NURMD GAME HUB",
+  "description": "A premium cyberpunk-themed multi-game platform featuring Love Runner, Chess, and Wave Dash: Geometry Arrow, complete with a shared skins shop, achievements, customizable profiles, and local global leaderboard.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
