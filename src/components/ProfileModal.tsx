@@ -12,7 +12,7 @@ interface ProfileModalProps {
 }
 
 export const ProfileModal: React.FC<ProfileModalProps> = ({ onClose }) => {
-  const { profile, updateUsername } = useGameStore();
+  const { profile, updateUsername, user, isAuthLoading, loginWithGoogle, logout } = useGameStore();
   const [editingName, setEditingName] = useState(false);
   const [tempName, setTempName] = useState(profile.username);
   
@@ -28,8 +28,8 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({ onClose }) => {
 
   // Metrics details
   const equippedAvatar = profile.skins.find(s => s.id === profile.avatarId && s.type === 'avatar');
-  const avatarCol = equippedAvatar?.glowColor || '#10b981';
-  const avatarSym = equippedAvatar?.renderSymbol || '⚡';
+  const avatarCol = equippedAvatar?.glowColor || '#ffb800';
+  const avatarSym = equippedAvatar?.renderSymbol || '♛';
 
   const unlockedCount = profile.achievements.filter(a => a.unlocked).length;
   const progressPercent = Math.round((unlockedCount / profile.achievements.length) * 100);
@@ -40,10 +40,10 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({ onClose }) => {
         initial={{ opacity: 0, scale: 0.95, y: 15 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.95, y: 15 }}
-        className="relative w-full max-w-2xl overflow-hidden rounded-2xl border-2 border-emerald-500 bg-zinc-950 p-6 shadow-[0_0_25px_rgba(16,185,129,0.2)] flex flex-col max-h-[85vh]"
+        className="relative w-full max-w-2xl overflow-hidden rounded-2xl border-2 border-emerald-500 bg-zinc-950 p-6 shadow-[0_0_25px_rgba(255,184,0,0.25)] flex flex-col max-h-[85vh]"
       >
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-zinc-800 pb-4 mb-4">
+        <div className="flex items-center justify-between border-b border-zinc-805 pb-4 mb-4">
           <div className="flex items-center gap-3">
             <div className="bg-emerald-500/10 p-2 rounded-lg border border-emerald-500/30">
               <User className="w-6 h-6 text-emerald-400" />
@@ -58,14 +58,14 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({ onClose }) => {
           <button
             id="close-profile"
             onClick={onClose}
-            className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-1.5 text-zinc-400 hover:text-white transition"
+            className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-1.5 text-zinc-400 hover:text-white transition cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Identity Overview Section */}
-        <div className="bg-zinc-900/10 border border-zinc-900 p-4 rounded-xl flex flex-col sm:flex-row items-center gap-4 mb-4 text-center sm:text-left bg-zinc-950">
+        <div className="bg-zinc-855 border border-zinc-900 p-4 rounded-xl flex flex-col sm:flex-row items-center gap-4 mb-4 text-center sm:text-left bg-zinc-955">
           
           {/* Avatar Rendering */}
           <div
@@ -103,7 +103,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({ onClose }) => {
                 <button
                   id="edit-username-btn"
                   onClick={() => setEditingName(true)}
-                  className="text-zinc-500 hover:text-emerald-400 transition"
+                  className="text-zinc-500 hover:text-emerald-400 transition cursor-pointer"
                   title="Modify Codename"
                 >
                   <Edit2 className="w-4 h-4" />
@@ -112,14 +112,41 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({ onClose }) => {
             )}
 
             {/* Achievement Bar overview */}
-            <div className="mt-2.5 space-y-1">
+            <div className="mt-2 text-y-1">
               <div className="flex justify-between items-center text-[10px] font-mono text-zinc-400">
                 <span>ACHIEVEMENTS COMPLETED: {unlockedCount}/{profile.achievements.length}</span>
                 <span className="text-emerald-400 font-bold">{progressPercent}%</span>
               </div>
-              <div className="w-full h-1.5 bg-zinc-900 rounded-full overflow-hidden">
+              <div className="w-full h-1 bg-zinc-900 rounded-full overflow-hidden mt-1">
                 <div className="h-full bg-emerald-500 transition-all duration-500" style={{ width: `${progressPercent}%` }} />
               </div>
+            </div>
+
+            {/* Google Authentication Control */}
+            <div className="mt-3.5 pt-2.5 border-t border-zinc-900/60 flex flex-wrap items-center justify-between gap-2 text-[10px] font-mono">
+              <span className="text-zinc-500">CLOUD SYNC SECURE BINDING:</span>
+              {isAuthLoading ? (
+                <span className="text-zinc-450 animate-pulse">PROBING SERVER CONSOLE...</span>
+              ) : user ? (
+                <div className="flex items-center gap-2">
+                  <span className="text-emerald-400 font-bold max-w-[150px] truncate" title={user.email || ''}>
+                    ● SYNCED ({user.displayName || user.email})
+                  </span>
+                  <button
+                    onClick={logout}
+                    className="p-1 px-2 rounded border border-red-900/40 hover:bg-red-500/[0.05] hover:border-red-500/60 text-red-400 text-[9px] uppercase cursor-pointer transition"
+                  >
+                    Mute Sync
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={loginWithGoogle}
+                  className="flex items-center gap-1.5 px-2 py-0.5 bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-bold rounded shadow-[0_0_8px_rgba(255,184,0,0.3)] transition text-[9px] uppercase cursor-pointer"
+                >
+                  Cloud Backup / Save
+                </button>
+              )}
             </div>
           </div>
 

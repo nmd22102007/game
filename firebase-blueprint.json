@@ -1,0 +1,97 @@
+{
+  "entities": {
+    "PlayerProfile": {
+      "title": "PlayerProfile",
+      "description": "User profile state in NURMD Game Hub",
+      "type": "object",
+      "properties": {
+        "username": {
+          "type": "string",
+          "description": "The user's gamer username"
+        },
+        "avatarId": {
+          "type": "string",
+          "description": "Equipped avatar item ID"
+        },
+        "coins": {
+          "type": "integer",
+          "description": "Current coins balance"
+        },
+        "totalScore": {
+          "type": "integer",
+          "description": "Total master ELO-styled competency score of the gamer"
+        },
+        "stats": {
+          "type": "object",
+          "description": "Aggregated dashboard statistics for all modular matches"
+        },
+        "skins": {
+          "type": "array",
+          "description": "Unlocked and equipped shop skins"
+        },
+        "achievements": {
+          "type": "array",
+          "description": "Gamer achievement master unlock history records"
+        }
+      },
+      "required": [
+        "username",
+        "avatarId",
+        "coins",
+        "totalScore",
+        "stats",
+        "skins",
+        "achievements"
+      ]
+    },
+    "LeaderboardEntry": {
+      "title": "LeaderboardEntry",
+      "description": "Aggregated high score record on server",
+      "type": "object",
+      "properties": {
+        "username": {
+          "type": "string",
+          "description": "Gamer name of the entry"
+        },
+        "score": {
+          "type": "integer",
+          "description": "Numeric game score"
+        },
+        "game": {
+          "type": "string",
+          "description": "Name of the game (e.g. Love Runner, Chess, Wave Dash)"
+        },
+        "date": {
+          "type": "string",
+          "description": "ISO format date of logging"
+        },
+        "avatarId": {
+          "type": "string",
+          "description": "Icon avatar indicator"
+        },
+        "userId": {
+          "type": "string",
+          "description": "Authenticated userID of record holder"
+        }
+      },
+      "required": [
+        "username",
+        "score",
+        "game",
+        "date",
+        "avatarId",
+        "userId"
+      ]
+    }
+  },
+  "firestore": {
+    "/profiles/{userId}": {
+      "schema": "PlayerProfile",
+      "description": "Personalized user data and unlock progress index"
+    },
+    "/leaderboard/{entryId}": {
+      "schema": "LeaderboardEntry",
+      "description": "Public aggregated tournament records"
+    }
+  }
+}

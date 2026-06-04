@@ -166,7 +166,7 @@ function HubPortal() {
 
   const equippedAvatar = profile.skins.find(s => s.id === profile.avatarId && s.type === 'avatar');
   const avatarSymbol = equippedAvatar?.renderSymbol || '⚡';
-  const avatarColor = equippedAvatar?.glowColor || '#00FF41';
+  const avatarColor = equippedAvatar?.glowColor || '#ffb800';
 
   return (
     <>
@@ -179,7 +179,7 @@ function HubPortal() {
             <div className="space-y-2">
               <div className="inline-block relative">
                 <div className="absolute -inset-4 bg-emerald-500/20 blur-xl animate-pulse rounded-full" />
-                <h1 className="text-4xl sm:text-5xl font-black text-white uppercase tracking-[0.25em] relative text-shadow-[0_0_20px_#00FF41] italic">
+                <h1 className="text-4xl sm:text-5xl font-black text-white uppercase tracking-[0.25em] relative text-shadow-[0_0_20px_#ffb800] italic">
                   NURMD <span className="text-emerald-500 font-extrabold">HUB</span>
                 </h1>
               </div>
@@ -319,7 +319,7 @@ function HubPortal() {
                       <span className="px-2 py-0.5 border border-emerald-500 text-emerald-500 text-[9px] sm:text-[10px] font-bold uppercase tracking-wider rounded bg-emerald-950/20">Speed Vector</span>
                     </div>
                     
-                    <h2 className="text-3xl sm:text-5xl font-black uppercase text-white mb-2 tracking-tighter sm:text-shadow-[0_0_12px_#00FF41]">
+                    <h2 className="text-3xl sm:text-5xl font-black uppercase text-white mb-2 tracking-tighter sm:text-shadow-[0_0_12px_#ffb800]">
                       Wave Dash
                     </h2>
                     
@@ -523,7 +523,7 @@ function HubPortal() {
                        <span className="text-[8.5px] uppercase text-zinc-500 tracking-wider mb-0.5">Platform Node Grid</span>
                        <span className="text-[10px] font-bold text-emerald-500 uppercase tracking-tighter pr-2">All Systems Operational</span>
                     </div>
-                    <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_5px_#00FF41]"></div>
+                    <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_5px_#ffb800]"></div>
                   </div>
                 </div>
 

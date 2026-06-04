@@ -1,0 +1,70 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global Safety Net default deny catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Reusable global helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // Gamer profiles collection path
+    match /profiles/{userId} {
+      allow get: if isSignedIn() && request.auth.uid == userId;
+      allow create: if isSignedIn() && request.auth.uid == userId && isValidPlayerProfile(incoming());
+      allow update: if isSignedIn() && request.auth.uid == userId && isValidPlayerProfile(incoming()) && (
+        incoming().diff(existing()).affectedKeys().hasAny(['username', 'avatarId', 'coins', 'totalScore', 'stats', 'skins', 'achievements'])
+      );
+      allow delete: if false; // Gamers are not allowed to delete profiles from client
+    }
+
+    function isValidPlayerProfile(data) {
+      return data.keys().hasAll(['username', 'avatarId', 'coins', 'totalScore', 'stats', 'skins', 'achievements'])
+        && data.keys().size() == 7
+        && data.username is string && data.username.size() >= 1 && data.username.size() <= 32
+        && data.avatarId is string && data.avatarId.size() <= 128
+        && data.coins is int && data.coins >= 0
+        && data.totalScore is int && data.totalScore >= 0
+        && data.stats is map
+        && data.skins is list
+        && data.achievements is list;
+    }
+
+    // Global tournament scorecard leaderboards collection path
+    match /leaderboard/{entryId} {
+      allow read, list: if isSignedIn();
+      allow create: if isSignedIn()
+        && isValidId(entryId)
+        && isValidLeaderboardEntry(incoming())
+        && incoming().userId == request.auth.uid;
+      allow update, delete: if false; // Scores are immutable records
+    }
+
+    function isValidLeaderboardEntry(data) {
+      return data.keys().hasAll(['username', 'score', 'game', 'date', 'avatarId', 'userId'])
+        && data.keys().size() == 6
+        && data.username is string && data.username.size() >= 1 && data.username.size() <= 32
+        && data.score is int && data.score >= 0
+        && data.game is string && data.game.size() <= 128
+        && data.date is string && data.date.size() <= 128
+        && data.avatarId is string && data.avatarId.size() <= 128
+        && data.userId is string && data.userId == request.auth.uid;
+    }
+  }
+}

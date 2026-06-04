@@ -2,11 +2,35 @@
  * React Context State Management Store for NURMD GAME HUB.
  * Implements real-time synchronization, achievements triggers, coin mechanics,
  * and high-performance LocalStorage persistence.
+ * Fully backed up with Firebase Auth and Firestore Cloud Sync.
  */
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { PlayerProfile, UserSettings, Skin, Achievement, LeaderboardEntry, PlayerStats } from '../types';
 import { audio } from './audio';
+import { 
+  auth, 
+  db, 
+  googleProvider, 
+  handleFirestoreError, 
+  OperationType 
+} from './firebase';
+import { 
+  onAuthStateChanged, 
+  signInWithPopup, 
+  signOut, 
+  User 
+} from 'firebase/auth';
+import { 
+  doc, 
+  getDoc, 
+  setDoc, 
+  collection, 
+  query, 
+  orderBy, 
+  limit, 
+  onSnapshot 
+} from 'firebase/firestore';
 
 interface GameStoreType {
   profile: PlayerProfile;
@@ -27,6 +51,11 @@ interface GameStoreType {
   resetAllData: () => void;
   activeToast: { title: string; reward: number } | null;
   resetToast: () => void;
+  // Firebase Auth variables
+  user: User | null;
+  isAuthLoading: boolean;
+  loginWithGoogle: () => Promise<void>;
+  logout: () => Promise<void>;
 }
 
 const DEFAULT_SETTINGS: UserSettings = {
@@ -44,19 +73,19 @@ const DEFAULT_SETTINGS: UserSettings = {
 
 const DEFAULT_SKINS: Skin[] = [
   // Arrows
-  { id: 'neon_arrow', name: 'Neon Arrow', type: 'arrow', cost: 0, unlocked: true, equipped: true, color: 'text-emerald-400 bg-emerald-400', glowColor: '#10b981' },
+  { id: 'neon_arrow', name: 'Obsidian Gold Arrow', type: 'arrow', cost: 0, unlocked: true, equipped: true, color: 'text-emerald-400 bg-emerald-400', glowColor: '#ffb800' },
   { id: 'cyber_chevron', name: 'Cyber Chevron', type: 'arrow', cost: 100, unlocked: false, equipped: false, color: 'text-indigo-400 bg-indigo-400', glowColor: '#6366f1' },
   { id: 'pulse_pointer', name: 'Pulse Pointer', type: 'arrow', cost: 250, unlocked: false, equipped: false, color: 'text-pink-500 bg-pink-500', glowColor: '#ec4899' },
   { id: 'phoenix_glider', name: 'Phoenix Glider', type: 'arrow', cost: 500, unlocked: false, equipped: false, color: 'text-amber-500 bg-amber-500', glowColor: '#f59e0b' },
   
   // Runners
-  { id: 'cyber_runner', name: 'Cyber Runner', type: 'runner', cost: 0, unlocked: true, equipped: true, color: 'text-emerald-400 bg-emerald-400', glowColor: '#10b981' },
+  { id: 'cyber_runner', name: 'Lux Gold Runner', type: 'runner', cost: 0, unlocked: true, equipped: true, color: 'text-emerald-400 bg-emerald-400', glowColor: '#ffb800' },
   { id: 'shadow_ninja', name: 'Shadow Ninja', type: 'runner', cost: 150, unlocked: false, equipped: false, color: 'text-purple-400 bg-purple-400', glowColor: '#a855f7' },
   { id: 'plasma_mech', name: 'Plasma Mech', type: 'runner', cost: 300, unlocked: false, equipped: false, color: 'text-red-500 bg-red-500', glowColor: '#ef4444' },
   { id: 'aurora_glider', name: 'Aurora Glider', type: 'runner', cost: 600, unlocked: false, equipped: false, color: 'text-cyan-400 bg-cyan-400', glowColor: '#22d3ee' },
   
   // Avatars
-  { id: 'cyber_avatar_1', name: 'Neon Agent', type: 'avatar', cost: 0, unlocked: true, equipped: true, color: 'text-emerald-400 border-emerald-400/50', glowColor: '#10b981', renderSymbol: '⚡' },
+  { id: 'cyber_avatar_1', name: 'Vanguard Crown', type: 'avatar', cost: 0, unlocked: true, equipped: true, color: 'text-emerald-400 border-emerald-400/50', glowColor: '#ffb800', renderSymbol: '♛' },
   { id: 'cyber_avatar_2', name: 'Synth Hacker', type: 'avatar', cost: 120, unlocked: false, equipped: false, color: 'text-fuchsia-400 border-fuchsia-400/50', glowColor: '#e879f9', renderSymbol: '👾' },
   { id: 'cyber_avatar_3', name: 'Retro Mech', type: 'avatar', cost: 200, unlocked: false, equipped: false, color: 'text-cyan-400 border-cyan-400/50', glowColor: '#06b6d4', renderSymbol: '🤖' },
   { id: 'cyber_avatar_4', name: 'Holo Queen', type: 'avatar', cost: 400, unlocked: false, equipped: false, color: 'text-pink-400 border-pink-400/50', glowColor: '#f43f5e', renderSymbol: '👑' }
@@ -100,7 +129,7 @@ const DEFAULT_PROFILE: PlayerProfile = {
     waveDashHighScore: 0,
     waveDashCoins: 0,
     waveDashPlays: 0,
-
+    
     totalCoinsEarned: 50,
     totalGamesPlayed: 0
   },
@@ -112,13 +141,32 @@ const DEFAULT_PROFILE: PlayerProfile = {
 const GameStoreContext = createContext<GameStoreType | undefined>(undefined);
 
 export const GameStoreProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [user, setUser] = useState<User | null>(null);
+  const [isAuthLoading, setIsAuthLoading] = useState(true);
+
   const [profile, setProfile] = useState<PlayerProfile>(() => {
     const data = localStorage.getItem('nurmd_profile');
     if (data) {
       try {
         const parsed = JSON.parse(data);
-        // Clean out any legacy structures or missing skins/achievements
-        if (!parsed.skins || parsed.skins.length === 0) parsed.skins = DEFAULT_SKINS;
+        if (!parsed.skins || parsed.skins.length === 0) {
+          parsed.skins = DEFAULT_SKINS;
+        } else {
+          parsed.skins = parsed.skins.map((s: Skin) => {
+            if (s.glowColor === '#10b981') {
+              let updatedName = s.name;
+              let symbol = s.renderSymbol;
+              if (s.id === 'neon_arrow') updatedName = 'Obsidian Gold Arrow';
+              if (s.id === 'cyber_runner') updatedName = 'Lux Gold Runner';
+              if (s.id === 'cyber_avatar_1') {
+                updatedName = 'Vanguard Crown';
+                symbol = '♛';
+              }
+              return { ...s, glowColor: '#ffb800', name: updatedName, renderSymbol: symbol };
+            }
+            return s;
+          });
+        }
         if (!parsed.achievements || parsed.achievements.length === 0) parsed.achievements = DEFAULT_ACHIEVEMENTS;
         if (!parsed.leaderboard) parsed.leaderboard = DEFAULT_LEADERBOARD;
         return parsed;
@@ -145,16 +193,138 @@ export const GameStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const [loadingScreen, setLoadingScreenState] = useState(true);
   const [activeToast, setActiveToast] = useState<{ title: string; reward: number } | null>(null);
 
-  // Sync to local storage
+  // Monitor Authentication State
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (srvUser) => {
+      setUser(srvUser);
+      setIsAuthLoading(true);
+
+      if (srvUser) {
+        try {
+          const docRef = doc(db, 'profiles', srvUser.uid);
+          const docSnap = await getDoc(docRef);
+
+          if (docSnap.exists()) {
+            const data = docSnap.data();
+            if (data && data.username) {
+              setProfile({
+                username: data.username,
+                avatarId: data.avatarId || 'cyber_avatar_1',
+                coins: typeof data.coins === 'number' ? data.coins : 50,
+                totalScore: typeof data.totalScore === 'number' ? data.totalScore : 0,
+                stats: data.stats || DEFAULT_PROFILE.stats,
+                skins: data.skins || DEFAULT_PROFILE.skins,
+                achievements: data.achievements || DEFAULT_PROFILE.achievements,
+                leaderboard: profile.leaderboard // keep state local as fallback
+              });
+            }
+          } else {
+            // Unify local accomplishments on first load
+            await setDoc(docRef, {
+              username: profile.username,
+              avatarId: profile.avatarId,
+              coins: profile.coins,
+              totalScore: profile.totalScore,
+              stats: profile.stats,
+              skins: profile.skins,
+              achievements: profile.achievements
+            });
+          }
+        } catch (error) {
+          console.error("Authenticated profile fetch failed: ", error);
+        }
+      }
+      setIsAuthLoading(false);
+    });
+
+    return () => unsubscribe();
+  }, []);
+
+  // Sync to local storage and Debounce sync to cloud
   useEffect(() => {
     localStorage.setItem('nurmd_profile', JSON.stringify(profile));
-  }, [profile]);
+
+    if (user) {
+      const syncProfile = async () => {
+        try {
+          const profileRef = doc(db, 'profiles', user.uid);
+          await setDoc(profileRef, {
+            username: profile.username,
+            avatarId: profile.avatarId,
+            coins: profile.coins,
+            totalScore: profile.totalScore,
+            stats: profile.stats,
+            skins: profile.skins,
+            achievements: profile.achievements
+          });
+        } catch (error) {
+          handleFirestoreError(error, OperationType.WRITE, `profiles/${user.uid}`);
+        }
+      };
+
+      const timer = setTimeout(syncProfile, 1500);
+      return () => clearTimeout(timer);
+    }
+  }, [profile, user]);
+
+  // Real-time Leaderboard Synchronizer via onSnapshot
+  useEffect(() => {
+    if (!user) return; // public secure reading requires any signed in credentials
+
+    const leaderboardRef = collection(db, 'leaderboard');
+    const q = query(leaderboardRef, orderBy('score', 'desc'), limit(10));
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const records: LeaderboardEntry[] = [];
+      snapshot.forEach((doc) => {
+        const item = doc.data();
+        if (item) {
+          records.push({
+            id: doc.id,
+            username: item.username || 'Gamer_99',
+            score: typeof item.score === 'number' ? item.score : 0,
+            game: item.game || 'Love Runner',
+            date: item.date || '',
+            avatarId: item.avatarId || 'cyber_avatar_1'
+          });
+        }
+      });
+      if (records.length > 0) {
+        setProfile(prev => ({
+          ...prev,
+          leaderboard: records
+        }));
+      }
+    }, (error) => {
+      console.warn("Leaderboard onSnapshot failed (or awaiting index creation): ", error);
+    });
+
+    return () => unsubscribe();
+  }, [user]);
 
   useEffect(() => {
     localStorage.setItem('nurmd_settings', JSON.stringify(settings));
-    // Core volume settings on the synthesized audio class
     audio.setVolumes(settings.musicVolume, settings.sfxVolume);
   }, [settings]);
+
+  // Google Login popup
+  const loginWithGoogle = async () => {
+    try {
+      await signInWithPopup(auth, googleProvider);
+    } catch (error) {
+      console.error("Google login popup failed: ", error);
+    }
+  };
+
+  // Logout routine
+  const logout = async () => {
+    try {
+      await signOut(auth);
+      setProfile(DEFAULT_PROFILE); // Reset profile details back to default
+    } catch (error) {
+      console.error("Sign out command failed: ", error);
+    }
+  };
 
   const updateUsername = (name: string) => {
     const trimmed = name.trim();
@@ -171,7 +341,6 @@ export const GameStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       const newCoins = prev.coins + amount;
       const newEarned = prev.stats.totalCoinsEarned + amount;
       
-      // Wealth Matrix Achievement progress check
       let updatedAchievements = [...prev.achievements];
       const wealthIdx = updatedAchievements.findIndex(a => a.id === 'collect_100');
       if (wealthIdx !== -1 && !updatedAchievements[wealthIdx].unlocked) {
@@ -182,7 +351,7 @@ export const GameStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         };
       }
 
-      const nextProfile = {
+      return {
         ...prev,
         coins: newCoins,
         stats: {
@@ -191,11 +360,8 @@ export const GameStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         },
         achievements: updatedAchievements
       };
-
-      return nextProfile;
     });
 
-    // Check achievement unlock trigger manually for Wealth index
     setTimeout(() => {
       setProfile(prev => {
         const index = prev.achievements.findIndex(a => a.id === 'collect_100');
@@ -259,21 +425,13 @@ export const GameStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const updateHighScore = (game: 'Love Runner' | 'Chess (AI)' | 'Wave Dash', score: number) => {
     setProfile(prev => {
       const updatedStats = { ...prev.stats };
-      let updatedHighScore = false;
 
       if (game === 'Love Runner') {
-        if (score > prev.stats.loveRunnerHighScore) {
-          updatedStats.loveRunnerHighScore = score;
-          updatedHighScore = true;
-        }
+        if (score > prev.stats.loveRunnerHighScore) updatedStats.loveRunnerHighScore = score;
       } else if (game === 'Wave Dash') {
-        if (score > prev.stats.waveDashHighScore) {
-          updatedStats.waveDashHighScore = score;
-          updatedHighScore = true;
-        }
+        if (score > prev.stats.waveDashHighScore) updatedStats.waveDashHighScore = score;
       }
 
-      // Track total score across platform
       const totalScoreSum = updatedStats.loveRunnerHighScore + updatedStats.waveDashHighScore + (updatedStats.chessWinsVsAI * 100);
 
       return {
@@ -283,7 +441,6 @@ export const GameStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       };
     });
 
-    // Check achievement hooks
     if (score >= 100) {
       triggerAchievement('score_100');
       triggerAchievement('first_win');
@@ -317,7 +474,6 @@ export const GameStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         }
       }
 
-      // Re-sum total score
       const totalScoreSum = updatedStats.loveRunnerHighScore + updatedStats.waveDashHighScore + (updatedStats.chessWinsVsAI * 100);
 
       return {
@@ -351,7 +507,6 @@ export const GameStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       };
     });
 
-    // First Drop achievement trigger
     triggerAchievement('first_game');
   };
 
@@ -388,7 +543,6 @@ export const GameStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       if (!targetSkin || !targetSkin.unlocked) return prev;
 
       const updatedSkins = prev.skins.map(s => {
-        // De-equip other skins of the SAME TYPE
         if (s.type === targetSkin.type) {
           return { ...s, equipped: s.id === skinId };
         }
@@ -405,11 +559,13 @@ export const GameStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     });
   };
 
-  const addLeaderboardEntry = (score: number, game: 'Love Runner' | 'Chess (AI)' | 'Wave Dash') => {
+  const addLeaderboardEntry = async (score: number, game: 'Love Runner' | 'Chess (AI)' | 'Wave Dash') => {
     if (score <= 0) return;
+    
+    // Always persist to local state copy as baseline
     setProfile(prev => {
       const newEntry: LeaderboardEntry = {
-        id: Math.random().toString(),
+        id: 'local_' + Math.random().toString(),
         username: prev.username,
         score,
         game,
@@ -417,7 +573,6 @@ export const GameStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         avatarId: prev.avatarId
       };
 
-      // Sort & slice top 8 scoreboard entries
       const nextLeaderboard = [newEntry, ...prev.leaderboard]
         .sort((a, b) => b.score - a.score)
         .slice(0, 10);
@@ -427,6 +582,23 @@ export const GameStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         leaderboard: nextLeaderboard
       };
     });
+
+    // Write to Firestore if connected and logged in
+    if (auth.currentUser) {
+      try {
+        const idPath = 'entry_' + Date.now() + '_' + Math.floor(Math.random() * 1000);
+        await setDoc(doc(db, 'leaderboard', idPath), {
+          username: profile.username,
+          score,
+          game,
+          date: new Date().toISOString().split('T')[0],
+          avatarId: profile.avatarId,
+          userId: auth.currentUser.uid
+        });
+      } catch (error) {
+        handleFirestoreError(error, OperationType.CREATE, 'leaderboard');
+      }
+    }
   };
 
   const updateSettings = (partialSettings: Partial<UserSettings>) => {
@@ -445,6 +617,9 @@ export const GameStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     localStorage.removeItem('nurmd_settings');
     setProfile(DEFAULT_PROFILE);
     setSettings(DEFAULT_SETTINGS);
+    if (auth.currentUser) {
+      logout();
+    }
   };
 
   const resetToast = () => setActiveToast(null);
@@ -472,7 +647,11 @@ export const GameStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       triggerAchievement,
       resetAllData,
       activeToast,
-      resetToast
+      resetToast,
+      user,
+      isAuthLoading,
+      loginWithGoogle,
+      logout
     }}>
       {children}
     </GameStoreContext.Provider>
