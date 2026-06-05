@@ -218,6 +218,11 @@ export const WaveDashGame: React.FC<WaveDashGameProps> = ({ onClose }) => {
           s.arrow.vy = 0;
         }
 
+        // Shift existing trail points to make the light path flow straight back with the game scrolling speed
+        s.trail.forEach(pt => {
+          pt.x -= s.gameSpeed;
+        });
+
         // Add coordinate to trailing spark wave lines
         s.trail.push({ x: s.arrow.x, y: s.arrow.y });
         if (s.trail.length > 35) s.trail.shift();
@@ -395,7 +400,8 @@ export const WaveDashGame: React.FC<WaveDashGameProps> = ({ onClose }) => {
       ctx.translate(s.arrow.x, s.arrow.y);
       
       // Rotate based on current movement direction vector
-      const targetAngle = s.isMouseDown ? -Math.PI / 6 : Math.PI / 6;
+      // Point straight forward (angle 0) when gliding along ceiling/floor boundaries
+      const targetAngle = s.arrow.vy === 0 ? 0 : (s.arrow.vy < 0 ? -Math.PI / 6 : Math.PI / 6);
       ctx.rotate(targetAngle);
 
       // Glowing body bounds
